@@ -9,8 +9,6 @@
 #include <VTFLib/VMTFile.h>
 #include <vmf_entity_data.hpp>
 
-#pragma comment(lib,"util_vmf.lib")
-
 #define IDBSPHEADER	(('P'<<24)+('S'<<16)+('B'<<8)+'V')
 
 #pragma optimize("",off)
