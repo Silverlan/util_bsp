@@ -6,7 +6,9 @@
 #include <fsys/filesystem.h>
 #include <sharedutils/util_string.h>
 #include <sharedutils/util_file.h>
+#ifdef ENABLE_VMT_SUPPORT
 #include <VTFLib/VMTFile.h>
+#endif
 #include <vmf_entity_data.hpp>
 
 #define IDBSPHEADER	(('P'<<24)+('S'<<16)+('B'<<8)+'V')
@@ -445,6 +447,7 @@ const std::vector<std::string> &bsp::File::GetTranslatedTexDataStrings()
 		return m_texDataStringDataTranslated;
 	m_bStringDataTranslated = true;
 	auto &strings = m_texDataStringDataTranslated = GetTexDataStrings();
+#if ENABLE_VMT_SUPPORT
 	auto &fileNames = GetFilenames();
 	for(auto &fname : fileNames)
 	{
@@ -488,6 +491,7 @@ const std::vector<std::string> &bsp::File::GetTranslatedTexDataStrings()
 			}
 		}
 	}
+#endif
 	return strings;
 }
 const std::vector<uint32_t> &bsp::File::GetTexDataStringIndices()
