@@ -59,7 +59,7 @@ set(ENABLE_STATIC_LIBRARY_FLAG 0)
 add_include_dir(sharedutils)
 add_include_dir(mathutil)
 add_include_dir(vfilesystem)
-if($(CONFIG_ENABLE_VMT_SUPPORT))
+if(CONFIG_ENABLE_VTF_SUPPORT)
 	add_include_dir(VTFLib)
 endif()
 add_include_dir(util_vmf)
@@ -68,7 +68,7 @@ add_include_dir(glm)
 
 set(DEFINITIONS)
 
-if($(CONFIG_ENABLE_VMT_SUPPORT))
+if(CONFIG_ENABLE_VTF_SUPPORT)
 	list(APPEND DEFINITIONS ENABLE_VMT_SUPPORT)
 endif()
 
