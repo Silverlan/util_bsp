@@ -7,13 +7,12 @@
 #include <sharedutils/util_string.h>
 #include <sharedutils/util_file.h>
 #ifdef ENABLE_VMT_SUPPORT
-#include <VTFLib/VMTFile.h>
+#include <VMTFile.h>
 #endif
 #include <vmf_entity_data.hpp>
 
 #define IDBSPHEADER	(('P'<<24)+('S'<<16)+('B'<<8)+'V')
 
-#pragma optimize("",off)
 std::unique_ptr<bsp::File> bsp::File::Open(VFilePtr &f,ResultCode &code)
 {
 	if(f == nullptr)
@@ -545,4 +544,3 @@ const bool bsp::File::ReadFile(const std::string &fname,std::vector<uint8_t> &da
 	f->Read(data.data(),data.size());
 	return true;
 }
-#pragma optimize("",on)
