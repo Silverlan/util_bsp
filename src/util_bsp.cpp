@@ -138,7 +138,7 @@ void bsp::File::ReadStaticPropsData()
 	auto numStaticProps = f->Read<int32_t>();
 	auto szStaticProps = lump.filelen -(f->Tell() -lump.fileofs);
 	assert((szStaticProps %numStaticProps) == 0);
-	auto szPerLump = szStaticProps /numStaticProps;
+	auto szPerLump = (numStaticProps > 0) ? (szStaticProps /numStaticProps) : 0;
 	auto &staticPropLumps = m_staticPropData.staticPropLumps;
 	staticPropLumps.reserve(numStaticProps);
 	for(auto i=decltype(numStaticProps){0u};i<numStaticProps;++i)
