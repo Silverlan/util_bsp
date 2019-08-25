@@ -288,6 +288,7 @@ void bsp::File::ReadTexInfoData() {ReadData<std::remove_reference_t<decltype(m_t
 void bsp::File::ReadTexData() {ReadData<std::remove_reference_t<decltype(m_texData.front())>>(2u,m_texData);}
 void bsp::File::ReadModelData() {ReadData<std::remove_reference_t<decltype(m_models.front())>>(14u,m_models);}
 void bsp::File::ReadDispLightmapSamplePositions() {ReadData<std::remove_reference_t<decltype(m_dispLightmapSamplePositions.front())>>(34u,m_dispLightmapSamplePositions);}
+void bsp::File::ReadCubemapSamples() {ReadData<std::remove_reference_t<decltype(m_cubemapSamples.front())>>(42u,m_cubemapSamples);}
 void bsp::File::ReadTexDataStringTableData() {ReadData<std::remove_reference_t<decltype(m_texDataStringTableData.front())>>(44u,m_texDataStringTableData);}
 void bsp::File::ReadTexDataStringData()
 {
@@ -525,6 +526,7 @@ const std::vector<uint8_t> &bsp::File::GetLightMapData() {ReadLightMapData(); re
 const std::vector<uint8_t> &bsp::File::GetHDRLightMapData() {ReadHDRLightMapData(); return m_lightMapDataHDR;}
 const std::vector<std::vector<uint8_t>> &bsp::File::GetVisibilityData() {ReadVisibilityData(); return m_visibilityData;}
 const std::vector<uint8_t> &bsp::File::GetDispLightmapSamplePositions() {ReadDispLightmapSamplePositions(); return m_dispLightmapSamplePositions;}
+const std::vector<bsp::dcubemapsample_t> &bsp::File::GetCubemapSamples() {ReadCubemapSamples(); return m_cubemapSamples;}
 const bsp::StaticPropData &bsp::File::GetStaticPropData() {ReadStaticPropsData(); return m_staticPropData;}
 const bool bsp::File::ReadFile(const std::string &fname,std::vector<uint8_t> &data)
 {

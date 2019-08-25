@@ -133,6 +133,11 @@ namespace bsp
 		// this is the area index. If not, this is -1.
 		int16_t paddding;	// pad to 32 bytes length
 	};
+	struct dcubemapsample_t
+	{
+		std::array<int32_t,3> origin; // position of light snapped to the nearest integer
+		int32_t size; // resolution of cubemap, 0 - default
+	};
 #pragma pack(pop)
 	typedef enum
 	{
@@ -358,6 +363,7 @@ namespace bsp
 		std::vector<dDisp> m_displacements;
 		std::vector<std::vector<uint8_t>> m_visibilityData;
 		std::vector<uint8_t> m_dispLightmapSamplePositions;
+		std::vector<dcubemapsample_t> m_cubemapSamples;
 		StaticPropData m_staticPropData = {};
 
 		ZIP_EndOfCentralDirRecord m_zipDirRecord;
@@ -397,6 +403,7 @@ namespace bsp
 		void ReadHDRLightMapData();
 		void ReadVisibilityData();
 		void ReadDispLightmapSamplePositions();
+		void ReadCubemapSamples();
 		template<class T,class TContainer>
 			void ReadData(uint32_t lumpId,TContainer &data);
 		template<class T,class TContainer>
@@ -432,6 +439,7 @@ namespace bsp
 		const std::vector<uint8_t> &GetHDRLightMapData();
 		const std::vector<std::vector<uint8_t>> &GetVisibilityData();
 		const std::vector<uint8_t> &GetDispLightmapSamplePositions();
+		const std::vector<dcubemapsample_t> &GetCubemapSamples();
 		const StaticPropData &GetStaticPropData();
 		const bool ReadFile(const std::string &fname,std::vector<uint8_t> &data);
 	};
