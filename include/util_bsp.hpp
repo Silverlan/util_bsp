@@ -17,6 +17,29 @@ namespace vmf {struct DataFileBlock;};
 namespace bsp
 {
 	const auto HEADER_LUMPS = 64u;
+
+	const auto LUMP_ID_ENTITIES = 0u;
+	const auto LUMP_ID_PLANES = 1u;
+	const auto LUMP_ID_TEXDATA = 2u;
+	const auto LUMP_ID_VERTICES = 3u;
+	const auto LUMP_ID_VISIBILITY = 4u;
+	const auto LUMP_ID_TEXINFO = 6u;
+	const auto LUMP_ID_FACES = 7u;
+	const auto LUMP_ID_LIGHTING = 8u;
+	const auto LUMP_ID_EDGES = 12u;
+	const auto LUMP_ID_SURF_EDGES = 13u;
+	const auto LUMP_ID_MODELS = 14u;
+	const auto LUMP_ID_BRUSHES = 18u;
+	const auto LUMP_ID_BRUSH_SIDES = 19u;
+	const auto LUMP_ID_ORIGINAL_FACES = 27u;
+	const auto LUMP_ID_DISP_LIGHTMAP_SAMPLE_POSITIONS = 34u;
+	const auto LUMP_ID_GAME = 35u;
+	const auto LUMP_ID_PAKFILE = 40u;
+	const auto LUMP_ID_CUBEMAPS = 42u;
+	const auto LUMP_ID_TEXDATA_STRING_DATA = 43u;
+	const auto LUMP_ID_TEXDATA_STRING_TABLE = 44u;
+	const auto LUMP_ID_LIGHTING_HDR = 53u;
+	const auto LUMP_ID_FACES_HDR = 58u;
 	struct dleaf_t
 	{
 		int32_t contents;		// OR of all brushes (not needed?)
@@ -325,6 +348,42 @@ namespace bsp
 	using EntityBlock = std::shared_ptr<vmf::DataFileBlock>;
 	class File
 	{
+	public:
+		static std::unique_ptr<File> Open(VFilePtr &f,ResultCode &code);
+
+		const lump_t *GetLumpHeaderInfo(uint32_t lumpId) const;
+		const std::vector<dgamelump_t> &GetGameLumps();
+		const std::vector<EntityBlock> &GetEntities();
+		const std::vector<dplane_t> &GetPlanes();
+		const std::vector<Vector3> &GetVertices();
+		const std::vector<dedge_t> &GetEdges();
+		const std::vector<int32_t> &GetSurfEdges();
+		const std::vector<dface_t> &GetFaces();
+		const std::vector<dface_t> &GetHDRFaces();
+		const std::vector<dface_t> &GetOriginalFaces();
+		const std::vector<dbrush_t> &GetBrushes();
+		const std::vector<dbrushside_t> &GetBrushSides();
+		const std::vector<texinfo_t> &GetTexInfo();
+		const std::vector<dtexdata_t> &GetTexData();
+		const std::vector<dmodel_t> &GetModels();
+		const std::vector<uint32_t> &GetTexDataStringIndices();
+		const std::vector<std::string> &GetTexDataStrings();
+		const std::vector<std::string> &GetTranslatedTexDataStrings();
+		const std::vector<dnode_t> &GetNodes();
+		const std::vector<dleaf_t> &GetLeaves();
+		const std::vector<uint16_t> &GetLeafFaces();
+		const std::vector<uint16_t> &GetLeafBrushes();
+		const std::vector<std::string> &GetFilenames();
+		const std::vector<ddispinfo_t> &GetDispInfo();
+		const std::vector<dDisp> &GetDisplacements();
+		const std::vector<uint8_t> &GetLightMapData();
+		const std::vector<uint8_t> &GetHDRLightMapData();
+		const std::vector<std::vector<uint8_t>> &GetVisibilityData();
+		const std::vector<uint8_t> &GetDispLightmapSamplePositions();
+		const std::vector<dcubemapsample_t> &GetCubemapSamples();
+		const StaticPropData &GetStaticPropData();
+		const dheader_t &GetHeaderData() const;
+		const bool ReadFile(const std::string &fname,std::vector<uint8_t> &data);
 	private:
 		VFilePtr m_file;
 		dheader_t m_header;
@@ -405,43 +464,9 @@ namespace bsp
 		void ReadDispLightmapSamplePositions();
 		void ReadCubemapSamples();
 		template<class T,class TContainer>
-			void ReadData(uint32_t lumpId,TContainer &data);
+		void ReadData(uint32_t lumpId,TContainer &data);
 		template<class T,class TContainer>
-			void ReadData(uint32_t lumpId,TContainer &data,uint32_t padding);
-	public:
-		static std::unique_ptr<File> Open(VFilePtr &f,ResultCode &code);
-
-		const std::vector<dgamelump_t> &GetGameLumps();
-		const std::vector<EntityBlock> &GetEntities();
-		const std::vector<dplane_t> &GetPlanes();
-		const std::vector<Vector3> &GetVertices();
-		const std::vector<dedge_t> &GetEdges();
-		const std::vector<int32_t> &GetSurfEdges();
-		const std::vector<dface_t> &GetFaces();
-		const std::vector<dface_t> &GetHDRFaces();
-		const std::vector<dface_t> &GetOriginalFaces();
-		const std::vector<dbrush_t> &GetBrushes();
-		const std::vector<dbrushside_t> &GetBrushSides();
-		const std::vector<texinfo_t> &GetTexInfo();
-		const std::vector<dtexdata_t> &GetTexData();
-		const std::vector<dmodel_t> &GetModels();
-		const std::vector<uint32_t> &GetTexDataStringIndices();
-		const std::vector<std::string> &GetTexDataStrings();
-		const std::vector<std::string> &GetTranslatedTexDataStrings();
-		const std::vector<dnode_t> &GetNodes();
-		const std::vector<dleaf_t> &GetLeaves();
-		const std::vector<uint16_t> &GetLeafFaces();
-		const std::vector<uint16_t> &GetLeafBrushes();
-		const std::vector<std::string> &GetFilenames();
-		const std::vector<ddispinfo_t> &GetDispInfo();
-		const std::vector<dDisp> &GetDisplacements();
-		const std::vector<uint8_t> &GetLightMapData();
-		const std::vector<uint8_t> &GetHDRLightMapData();
-		const std::vector<std::vector<uint8_t>> &GetVisibilityData();
-		const std::vector<uint8_t> &GetDispLightmapSamplePositions();
-		const std::vector<dcubemapsample_t> &GetCubemapSamples();
-		const StaticPropData &GetStaticPropData();
-		const bool ReadFile(const std::string &fname,std::vector<uint8_t> &data);
+		void ReadData(uint32_t lumpId,TContainer &data,uint32_t padding);
 	};
 };
 
