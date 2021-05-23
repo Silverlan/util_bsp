@@ -332,7 +332,7 @@ void bsp::File::ReadPakfile()
 	if(lump.filelen == 0)
 		return;
 
-	auto offset = lump.fileofs +lump.filelen -sizeof(ZIP_EndOfCentralDirRecord);
+	int64_t offset = lump.fileofs +lump.filelen -sizeof(ZIP_EndOfCentralDirRecord);
 
 	auto bFoundRecord = false;
 	for(;offset>=0;offset--)
