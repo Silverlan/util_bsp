@@ -468,7 +468,7 @@ const std::vector<std::string> &bsp::File::GetTranslatedTexDataStrings()
 		if(it == strings.end())
 			continue;
 		std::string ext;
-		if(ufile::get_extension(fname,&ext) == true && ustring::compare(ext,"vmt",false) == true)
+		if(ufile::get_extension(fname,&ext) == true && ustring::compare<std::string>(ext,"vmt",false) == true)
 		{
 			std::vector<uint8_t> data;
 			if(ReadFile(fname,data) == true)
@@ -478,7 +478,7 @@ const std::vector<std::string> &bsp::File::GetTranslatedTexDataStrings()
 				{
 					auto *vmtRoot = vmt.GetRoot();
 					std::string shader = vmtRoot->GetName();
-					if(ustring::compare(shader,"patch",false))
+					if(ustring::compare<std::string>(shader,"patch",false))
 					{
 						VTFLib::Nodes::CVMTNode *node = nullptr;
 						if((node = vmtRoot->GetNode("include")) != nullptr)
