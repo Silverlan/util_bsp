@@ -6,6 +6,7 @@
 #include <fsys/filesystem.h>
 #include <sharedutils/util_string.h>
 #include <sharedutils/util_file.h>
+#include <sharedutils/util_path.hpp>
 #ifdef ENABLE_VMT_SUPPORT
 #include <VMTFile.h>
 #endif
@@ -306,7 +307,7 @@ void bsp::File::ReadTexDataStringData()
 	while(f->Eof() == false && f->Tell() < lump.fileofs +lump.filelen)
 	{
 		m_texDataStringDataIndexMap.insert(std::make_pair(f->Tell() -lump.fileofs,m_texDataStringData.size()));
-		m_texDataStringData.push_back(f->ReadString());
+		m_texDataStringData.push_back(util::Path::CreateFile(f->ReadString()).GetString());
 	}
 }
 void bsp::File::ReadNodes() {ReadData<std::remove_reference_t<decltype(m_nodes.front())>>(5u,m_nodes);}
