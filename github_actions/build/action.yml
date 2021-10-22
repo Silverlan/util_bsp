@@ -32,7 +32,7 @@ runs:
             dir: 'external_libs'
 
     - name: Build submodule - util_vmf
-      uses: Silverlan/util_vmf/github_actions/build@master
+      uses: Silverlan/util_vmf/github_actions/build@actions
       with:
         root_dir: "${{ env.GA_ROOT_DIR }}/external_libs/util_vmf"
 
