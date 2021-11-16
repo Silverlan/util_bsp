@@ -62,8 +62,12 @@ add_include_dir(vfilesystem)
 add_include_dir(VTFLib)
 add_include_dir(vtflib_build)
 add_include_dir(util_vmf)
+add_include_dir(liblzma)
+add_include_dir(util_zip)
 
 add_include_dir(glm)
+
+add_subdirectory(third_party_libs/liblzma)
 
 set(DEFINITIONS)
 

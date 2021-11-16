@@ -4,6 +4,7 @@
 
 #include "util_bsp.hpp"
 #include <fsys/filesystem.h>
+#include <fsys/ifile.hpp>
 #include <sharedutils/util_string.h>
 #include <sharedutils/util_file.h>
 #include <sharedutils/util_path.hpp>
@@ -42,6 +43,64 @@ bsp::File::File(VFilePtr &f,const dheader_t &header)
 bool bsp::File::HasReadLump(uint32_t lumpId) const {return m_readLumps &(1ull<<lumpId);}
 void bsp::File::MarkLumpAsRead(uint32_t lumpId) {m_readLumps |= (1ull<<lumpId);}
 
+#include "LzmaLib.h"
+#define LZMA_ID	(('A'<<24)|('M'<<16)|('Z'<<8)|('L'))
+#pragma pack(push,1)
+struct lzma_header_t
+{
+	uint32_t id;
+	uint32_t actualSize; // always little endian
+	uint32_t lzmaSize; // always little endian
+	std::array<uint8_t,5> properties;
+};
+#pragma pack(pop)
+enum class DecompressionResult : uint8_t
+{
+	NotCompressed = 0,
+	Success,
+	Failed
+};
+static DecompressionResult decompress_lzma(
+	VFilePtr &f,std::vector<uint8_t> &decompressedData
+)
+{
+	auto id = f->Read<uint32_t>();
+	f->Seek(f->Tell() -sizeof(uint32_t));
+	if(id != LZMA_ID)
+		return DecompressionResult::NotCompressed;
+	auto lzmaHeader = f->Read<lzma_header_t>();
+	std::vector<uint8_t> compressedData;
+	compressedData.resize(lzmaHeader.lzmaSize);
+	f->Read(compressedData.data(),compressedData.size());
+	
+	decompressedData.resize(lzmaHeader.actualSize);
+	size_t decompressedSize = decompressedData.size();
+	size_t compressedSize = compressedData.size();
+	auto result = LzmaUncompress(
+		decompressedData.data(),&decompressedSize,
+		compressedData.data(),&compressedSize,lzmaHeader.properties.data(),lzmaHeader.properties.size()
+	);
+	return (result == SZ_OK) ? DecompressionResult::Success : DecompressionResult::Failed;
+}
+
+template<class TLump>
+	static std::unique_ptr<ufile::IFile> get_lump_file(const TLump &lump,VFilePtr &f,uint64_t &offset,uint64_t &outSize)
+{
+	std::vector<uint8_t> uncompressedData;
+	auto r = decompress_lzma(f,uncompressedData);
+	if(r == DecompressionResult::Success)
+	{
+		offset = 0;
+		outSize = uncompressedData.size();
+		return std::make_unique<ufile::VectorFile>(std::move(uncompressedData));
+	}
+	if(r == DecompressionResult::Failed)
+		return nullptr;
+	offset = lump.fileofs;
+	outSize = lump.filelen;
+	return std::make_unique<fsys::File>(f);
+}
+
 template<class T,class TContainer>
 	void bsp::File::ReadData(uint32_t lumpId,TContainer &data)
 {
@@ -55,10 +114,16 @@ template<class T,class TContainer>
 		return;
 	f->Seek(lump.fileofs);
 
-	assert((lump.filelen %sizeof(T)) == 0);
-	auto numData = lump.filelen /sizeof(T);
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+
+	assert((size %sizeof(T)) == 0);
+	auto numData = size /sizeof(T);
 	data.resize(numData);
-	f->Read(&data[0],sizeof(data.front()) *data.size());
+	fl->Read(&data[0],sizeof(data.front()) *data.size());
 }
 
 template<class T,class TContainer>
@@ -79,13 +144,22 @@ template<class T,class TContainer>
 		return;
 	f->Seek(lump.fileofs);
 
-	assert((lump.filelen %sizeof(T)) == 0);
-	auto numData = lump.filelen /sizeof(T);
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+
+	auto id = fl->Read<uint32_t>();
+	fl->Seek(fl->Tell() -sizeof(uint32_t));
+
+	assert((size %sizeof(T)) == 0);
+	auto numData = size /sizeof(T);
 	data.resize(numData);
 	for(auto i=decltype(numData){0};i<numData;++i)
 	{
-		f->Read(&data[i],sizeof(data.front()));
-		f->Seek(f->Tell() +padding);
+		fl->Read(&data[i],sizeof(data.front()));
+		fl->Seek(fl->Tell() +padding);
 	}
 }
 
@@ -101,9 +175,20 @@ void bsp::File::ReadGameData()
 	if(lump.filelen == 0)
 		return;
 	f->Seek(lump.fileofs);
+
 	auto numLumps = f->Read<int32_t>();
 	m_gameLumps.resize(numLumps);
-	f->Read(m_gameLumps.data(),m_gameLumps.size() *sizeof(m_gameLumps.front()));
+
+	for(auto i=decltype(numLumps){0u};i<numLumps;++i)
+	{
+		auto &lump = m_gameLumps[i];
+		size_t offset;
+		size_t size;
+		auto fl = get_lump_file(lump,f,offset,size);
+		if(!fl)
+			return;
+		fl->Read(&lump,sizeof(lump));
+	}
 }
 
 void bsp::File::ReadStaticPropsData()
@@ -122,23 +207,29 @@ void bsp::File::ReadStaticPropsData()
 		return;
 	auto version = lump.version;
 	f->Seek(lump.fileofs);
-	auto numDictEntires = f->Read<int32_t>();
+
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+	auto numDictEntires = fl->Read<int32_t>();
 	auto &modelNames = m_staticPropData.dictionaryModelNames;
 	modelNames.reserve(numDictEntires);
 	for(auto i=decltype(numDictEntires){0};i<numDictEntires;++i)
 	{
 		std::array<char,128> name;
-		f->Read(name.data(),name.size() *sizeof(name.front()));
+		fl->Read(name.data(),name.size() *sizeof(name.front()));
 		modelNames.push_back(std::string{name.data()});
 	}
 
-	auto numLeafEntries = f->Read<int32_t>();
+	auto numLeafEntries = fl->Read<int32_t>();
 	auto &leaves = m_staticPropData.leaves;
 	leaves.resize(numLeafEntries);
-	f->Read(leaves.data(),leaves.size() *sizeof(leaves.front()));
+	fl->Read(leaves.data(),leaves.size() *sizeof(leaves.front()));
 
-	auto numStaticProps = f->Read<int32_t>();
-	auto szStaticProps = lump.filelen -(f->Tell() -lump.fileofs);
+	auto numStaticProps = fl->Read<int32_t>();
+	auto szStaticProps = size -(fl->Tell() -offset);
 	assert((szStaticProps %numStaticProps) == 0);
 	auto szPerLump = (numStaticProps > 0) ? (szStaticProps /numStaticProps) : 0;
 	auto &staticPropLumps = m_staticPropData.staticPropLumps;
@@ -146,23 +237,23 @@ void bsp::File::ReadStaticPropsData()
 	for(auto i=decltype(numStaticProps){0u};i<numStaticProps;++i)
 	{
 		staticPropLumps.push_back({});
-		auto offset = f->Tell();
+		auto offset = fl->Tell();
 		auto &propLump = staticPropLumps.back();
 		if(version >= 4)
 		{
-			propLump.Origin = f->Read<Vector3>();
-			propLump.Angles = f->Read<EulerAngles>();
-			propLump.PropType = f->Read<uint16_t>();
-			propLump.FirstLeaf = f->Read<uint16_t>();
-			propLump.LeafCount = f->Read<uint16_t>();
-			propLump.Solid = f->Read<uint8_t>();
-			propLump.Flags = f->Read<uint8_t>();
-			propLump.Skin = f->Read<int32_t>();
-			propLump.FadeMinDist = f->Read<float>();
-			propLump.FadeMaxDist = f->Read<float>();
-			propLump.LightingOrigin = f->Read<Vector3>();
+			propLump.Origin = fl->Read<Vector3>();
+			propLump.Angles = fl->Read<EulerAngles>();
+			propLump.PropType = fl->Read<uint16_t>();
+			propLump.FirstLeaf = fl->Read<uint16_t>();
+			propLump.LeafCount = fl->Read<uint16_t>();
+			propLump.Solid = fl->Read<uint8_t>();
+			propLump.Flags = fl->Read<uint8_t>();
+			propLump.Skin = fl->Read<int32_t>();
+			propLump.FadeMinDist = fl->Read<float>();
+			propLump.FadeMaxDist = fl->Read<float>();
+			propLump.LightingOrigin = fl->Read<Vector3>();
 		}
-		f->Seek(offset +szPerLump);
+		fl->Seek(offset +szPerLump);
 	}
 }
 
@@ -179,8 +270,17 @@ void bsp::File::ReadEntityData()
 		return;
 	f->Seek(lump.fileofs);
 
-	auto lumpEnd = lump.fileofs +lump.filelen;
-	auto data = std::unique_ptr<vmf::DataFileBlock>(vmf::DataFile::ReadBlock(f,lumpEnd));
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+
+	auto id = fl->Read<uint32_t>();
+	fl->Seek(fl->Tell() -sizeof(uint32_t));
+
+	auto lumpEnd = offset +size;
+	std::unique_ptr<vmf::DataFileBlock> data {vmf::DataFile::ReadBlock(*fl,lumpEnd)};
 	if(data == nullptr)
 		return;
 	auto it = data->blocks.find("unnamed");
@@ -207,9 +307,15 @@ void bsp::File::ReadLightMapData()
 	auto &lump = header.lumps.at(lumpId);
 	if(lump.filelen == 0)
 		return;
-	m_lightMapData.resize(lump.filelen);
 	f->Seek(lump.fileofs);
-	f->Read(m_lightMapData.data(),lump.filelen);
+
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+	m_lightMapData.resize(size);
+	fl->Read(m_lightMapData.data(),size);
 }
 void bsp::File::ReadHDRLightMapData()
 {
@@ -223,9 +329,15 @@ void bsp::File::ReadHDRLightMapData()
 	auto &lump = header.lumps.at(lumpId);
 	if(lump.filelen == 0)
 		return;
-	m_lightMapDataHDR.resize(lump.filelen);
 	f->Seek(lump.fileofs);
-	f->Read(m_lightMapDataHDR.data(),lump.filelen);
+
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+	m_lightMapDataHDR.resize(size);
+	fl->Read(m_lightMapDataHDR.data(),size);
 }
 void bsp::File::ReadVisibilityData()
 {
@@ -240,6 +352,13 @@ void bsp::File::ReadVisibilityData()
 	if(lump.filelen == 0)
 		return;
 	f->Seek(lump.fileofs);
+
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+
 #pragma pack(push,1)
 	struct ClusterOffsetInfo
 	{
@@ -247,13 +366,13 @@ void bsp::File::ReadVisibilityData()
 		int32_t offsetPAS;
 	};
 #pragma pack(pop)
-	auto numClusters = f->Read<int32_t>();
+	auto numClusters = fl->Read<int32_t>();
 	std::vector<ClusterOffsetInfo> offsets(numClusters);
-	f->Read(offsets.data(),offsets.size() *sizeof(offsets.front()));
+	fl->Read(offsets.data(),offsets.size() *sizeof(offsets.front()));
 
-	auto headerSize = f->Tell() -lump.fileofs;
-	std::vector<uint8_t> compressedData(lump.filelen -headerSize);
-	f->Read(compressedData.data(),compressedData.size() *sizeof(compressedData.front()));
+	auto headerSize = fl->Tell() -offset;
+	std::vector<uint8_t> compressedData(size -headerSize);
+	fl->Read(compressedData.data(),compressedData.size() *sizeof(compressedData.front()));
 	m_visibilityData.resize(numClusters,std::vector<uint8_t>(numClusters,0u));
 	for(auto i=decltype(numClusters){0};i<numClusters;++i)
 	{
@@ -304,10 +423,17 @@ void bsp::File::ReadTexDataStringData()
 	if(lump.filelen == 0)
 		return;
 	f->Seek(lump.fileofs);
-	while(f->Eof() == false && f->Tell() < lump.fileofs +lump.filelen)
+
+	size_t offset;
+	size_t size;
+	auto fl = get_lump_file(lump,f,offset,size);
+	if(!fl)
+		return;
+
+	while(fl->Eof() == false && fl->Tell() < offset +size)
 	{
-		m_texDataStringDataIndexMap.insert(std::make_pair(f->Tell() -lump.fileofs,m_texDataStringData.size()));
-		m_texDataStringData.push_back(util::Path::CreateFile(f->ReadString()).GetString());
+		m_texDataStringDataIndexMap.insert(std::make_pair(fl->Tell() -offset,m_texDataStringData.size()));
+		m_texDataStringData.push_back(util::Path::CreateFile(fl->ReadString()).GetString());
 	}
 }
 void bsp::File::ReadNodes() {ReadData<std::remove_reference_t<decltype(m_nodes.front())>>(5u,m_nodes);}
@@ -321,6 +447,7 @@ void bsp::File::ReadLeaves()
 void bsp::File::ReadLeafFaces() {ReadData<std::remove_reference_t<decltype(m_leafFaces.front())>>(16u,m_leafFaces);}
 void bsp::File::ReadLeafBrushes() {ReadData<std::remove_reference_t<decltype(m_leafBrushes.front())>>(17u,m_leafBrushes);}
 #define PKID( a, b ) (((b)<<24)|((a)<<16)|('K'<<8)|'P')
+#include <util_zip.h>
 void bsp::File::ReadPakfile()
 {
 	const auto lumpId = LUMP_ID_PAKFILE;
@@ -334,6 +461,12 @@ void bsp::File::ReadPakfile()
 		return;
 
 	int64_t offset = lump.fileofs +lump.filelen -sizeof(ZIP_EndOfCentralDirRecord);
+
+	auto &data = m_pakZipData;
+	m_file->Seek(lump.fileofs);
+	data.resize(lump.filelen);
+	f->Read(data.data(),data.size());
+	m_pakZipFile = ZIPFile::Open(data.data(),data.size());
 
 	auto bFoundRecord = false;
 	for(;offset>=0;offset--)
@@ -397,7 +530,21 @@ void bsp::File::ReadDisplacementData()
 			displacements.reserve(displacements.size() +100);
 		displacements.push_back({faces.at(faceDispInfo.MapFace),plane,faceDispInfo});
 	}
+	
+	auto &header = m_header;
+	size_t offsetV;
+	size_t sizeV;
+	auto &lumpV = header.lumps.at(LUMP_ID_DISP_VERTS);
+	m_file->Seek(lumpV.fileofs);
+	auto flV = get_lump_file(lumpV,m_file,offsetV,sizeV);
 
+	size_t offsetT;
+	size_t sizeT;
+	auto &lumpT = header.lumps.at(LUMP_ID_DISP_TRIS);
+	m_file->Seek(lumpT.fileofs);
+	auto flT = get_lump_file(lumpT,m_file,offsetT,sizeT);
+	if(!flV || !flT)
+		return;
 	for(auto &disp : displacements)
 	{
 		auto &dispInfo = disp.dispInfo;
@@ -407,22 +554,18 @@ void bsp::File::ReadDisplacementData()
 		auto numVerts = umath::pow2(umath::pow(2u,p) +1u);
 		auto numTris = 2 *umath::pow2(umath::pow(2u,p));
 
-		auto &f = m_file;
-		auto &header = m_header;
-		auto &lumpVerts = header.lumps.at(33u);
-		if(lumpVerts.filelen != 0)
+		if(sizeV != 0)
 		{
 			dispVerts.resize(numVerts);
-			f->Seek(lumpVerts.fileofs +dispInfo.DispVertStart *sizeof(dispVerts.front()));
-			f->Read(dispVerts.data(),dispVerts.size(),sizeof(dispVerts.front()));
+			flV->Seek(offsetV +dispInfo.DispVertStart *sizeof(dispVerts.front()));
+			flV->Read(dispVerts.data(),dispVerts.size() *sizeof(dispVerts.front()));
 		}
 
-		auto &lumpTris = header.lumps.at(48u);
-		if(lumpTris.filelen != 0)
+		if(sizeT != 0)
 		{
 			dispTris.resize(numTris);
-			f->Seek(lumpTris.fileofs +dispInfo.DispTriStart *sizeof(dispTris.front()));
-			f->Read(dispTris.data(),dispTris.size(),sizeof(dispTris.front()));
+			flT->Seek(offsetT +dispInfo.DispTriStart *sizeof(dispTris.front()));
+			flT->Read(dispTris.data(),dispTris.size() *sizeof(dispTris.front()));
 		}
 	}
 }
@@ -539,6 +682,19 @@ const bsp::dheader_t &bsp::File::GetHeaderData() const {return m_header;}
 const bool bsp::File::ReadFile(const std::string &fname,std::vector<uint8_t> &data)
 {
 	ReadPakfile();
+	if(!m_pakZipFile)
+		return false;
+	std::string err;
+	auto r = m_pakZipFile->ReadFile(fname,data,err);
+	if(r == false)
+	{
+		// Probably an unsupported compression algorithm
+		// std::cout<<"Unable to read zip file '"<<fname<<"': "<<err<<std::endl;
+	}
+	return r;
+
+	// Obsolete
+#if 0
 	auto it = std::find_if(m_fileNames.begin(),m_fileNames.end(),[&](const std::string &fnameOther) {
 		return ustring::compare(fname,fnameOther,false);
 	});
@@ -546,12 +702,13 @@ const bool bsp::File::ReadFile(const std::string &fname,std::vector<uint8_t> &da
 		return false;
 	auto hdIdx = it -m_fileNames.begin();
 	auto &lhd = m_fileHeaders.at(hdIdx);
+	auto &f = m_file;
 	if(lhd.compressionMethod != 0 || lhd.uncompressedSize != lhd.compressedSize)
 		return false;
-	auto &f = m_file;
 	data.resize(lhd.uncompressedSize);
 	f->Seek(m_fileDataOffsets.at(hdIdx));
 	f->Read(data.data(),data.size());
 	return true;
+#endif
 }
 #pragma optimize("",on)

@@ -14,6 +14,7 @@
 #define MAX_DISP_CORNER_NEIGHBORS 4
 
 namespace vmf {struct DataFileBlock;};
+class ZIPFile;
 namespace bsp
 {
 	const auto HEADER_LUMPS = 64u;
@@ -32,12 +33,14 @@ namespace bsp
 	const auto LUMP_ID_BRUSHES = 18u;
 	const auto LUMP_ID_BRUSH_SIDES = 19u;
 	const auto LUMP_ID_ORIGINAL_FACES = 27u;
+	const auto LUMP_ID_DISP_VERTS = 33u;
 	const auto LUMP_ID_DISP_LIGHTMAP_SAMPLE_POSITIONS = 34u;
 	const auto LUMP_ID_GAME = 35u;
 	const auto LUMP_ID_PAKFILE = 40u;
 	const auto LUMP_ID_CUBEMAPS = 42u;
 	const auto LUMP_ID_TEXDATA_STRING_DATA = 43u;
 	const auto LUMP_ID_TEXDATA_STRING_TABLE = 44u;
+	const auto LUMP_ID_DISP_TRIS = 48u;
 	const auto LUMP_ID_LIGHTING_HDR = 53u;
 	const auto LUMP_ID_FACES_HDR = 58u;
 	struct dleaf_t
@@ -425,6 +428,8 @@ namespace bsp
 		std::vector<dcubemapsample_t> m_cubemapSamples;
 		StaticPropData m_staticPropData = {};
 
+		std::vector<uint8_t> m_pakZipData;
+		std::shared_ptr<ZIPFile> m_pakZipFile = nullptr;
 		ZIP_EndOfCentralDirRecord m_zipDirRecord;
 		std::vector<ZIP_FileHeader> m_fileHeaders;
 		std::vector<ZIP_LocalFileHeader> m_localFileHeaders;
