@@ -15,7 +15,6 @@
 
 #define IDBSPHEADER	(('P'<<24)+('S'<<16)+('B'<<8)+'V')
 
-#pragma optimize("",off)
 std::unique_ptr<bsp::File> bsp::File::Open(VFilePtr &f,ResultCode &code)
 {
 	if(f == nullptr)
@@ -43,7 +42,7 @@ bsp::File::File(VFilePtr &f,const dheader_t &header)
 bool bsp::File::HasReadLump(uint32_t lumpId) const {return m_readLumps &(1ull<<lumpId);}
 void bsp::File::MarkLumpAsRead(uint32_t lumpId) {m_readLumps |= (1ull<<lumpId);}
 
-#include "LzmaLib.h"
+bool lzma_uncompress(unsigned char *dest, size_t *destLen, const unsigned char *src, size_t *srcLen,const unsigned char *props, size_t propsSize);
 #define LZMA_ID	(('A'<<24)|('M'<<16)|('Z'<<8)|('L'))
 #pragma pack(push,1)
 struct lzma_header_t
@@ -76,11 +75,11 @@ static DecompressionResult decompress_lzma(
 	decompressedData.resize(lzmaHeader.actualSize);
 	size_t decompressedSize = decompressedData.size();
 	size_t compressedSize = compressedData.size();
-	auto result = LzmaUncompress(
+	auto result = lzma_uncompress(
 		decompressedData.data(),&decompressedSize,
 		compressedData.data(),&compressedSize,lzmaHeader.properties.data(),lzmaHeader.properties.size()
 	);
-	return (result == SZ_OK) ? DecompressionResult::Success : DecompressionResult::Failed;
+	return result ? DecompressionResult::Success : DecompressionResult::Failed;
 }
 
 template<class TLump>
@@ -711,4 +710,3 @@ const bool bsp::File::ReadFile(const std::string &fname,std::vector<uint8_t> &da
 	return true;
 #endif
 }
-#pragma optimize("",on)
