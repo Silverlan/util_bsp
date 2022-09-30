@@ -41,8 +41,10 @@ bsp::File::File(VFilePtr &f,const dheader_t &header)
 
 bool bsp::File::HasReadLump(uint32_t lumpId) const {return m_readLumps &(1ull<<lumpId);}
 void bsp::File::MarkLumpAsRead(uint32_t lumpId) {m_readLumps |= (1ull<<lumpId);}
-
-bool lzma_uncompress(unsigned char *dest, size_t *destLen, const unsigned char *src, size_t *srcLen,const unsigned char *props, size_t propsSize);
+namespace bsp::detail
+{
+	bool lzma_uncompress(unsigned char *dest, size_t *destLen, const unsigned char *src, size_t *srcLen,const unsigned char *props, size_t propsSize);
+};
 #define LZMA_ID	(('A'<<24)|('M'<<16)|('Z'<<8)|('L'))
 #pragma pack(push,1)
 struct lzma_header_t
@@ -75,7 +77,7 @@ static DecompressionResult decompress_lzma(
 	decompressedData.resize(lzmaHeader.actualSize);
 	size_t decompressedSize = decompressedData.size();
 	size_t compressedSize = compressedData.size();
-	auto result = lzma_uncompress(
+	auto result = bsp::detail::lzma_uncompress(
 		decompressedData.data(),&decompressedSize,
 		compressedData.data(),&compressedSize,lzmaHeader.properties.data(),lzmaHeader.properties.size()
 	);
