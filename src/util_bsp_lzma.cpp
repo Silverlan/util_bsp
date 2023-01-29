@@ -4,10 +4,6 @@
 
 #include "LzmaLib.h"
 
-namespace bsp::detail
-{
-	bool lzma_uncompress(unsigned char *dest, size_t *destLen, const unsigned char *src, size_t *srcLen,const unsigned char *props, size_t propsSize)
-	{
-		return LzmaUncompress(dest,destLen,src,srcLen,props,propsSize) == SZ_OK;
-	}
+namespace bsp::detail {
+	bool lzma_uncompress(unsigned char *dest, size_t *destLen, const unsigned char *src, size_t *srcLen, const unsigned char *props, size_t propsSize) { return LzmaUncompress(dest, destLen, src, srcLen, props, propsSize) == SZ_OK; }
 };
