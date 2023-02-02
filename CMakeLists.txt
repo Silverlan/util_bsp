@@ -71,6 +71,7 @@ add_subdirectory(third_party_libs/liblzma)
 
 set(DEFINITIONS)
 
+option(CONFIG_ENABLE_VTF_SUPPORT "Enable VTF support?" ON)
 if(CONFIG_ENABLE_VTF_SUPPORT)
 	list(APPEND DEFINITIONS ENABLE_VMT_SUPPORT)
 endif()
