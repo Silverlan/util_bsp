@@ -12,6 +12,7 @@
 #include <VMTFile.h>
 #endif
 #include <vmf_entity_data.hpp>
+#include <cassert>
 
 #define IDBSPHEADER (('P' << 24) + ('S' << 16) + ('B' << 8) + 'V')
 
