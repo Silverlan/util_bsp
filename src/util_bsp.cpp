@@ -14,6 +14,8 @@
 #include <vmf_entity_data.hpp>
 #include <cassert>
 
+import util_zip;
+
 #define IDBSPHEADER (('P' << 24) + ('S' << 16) + ('B' << 8) + 'V')
 
 std::unique_ptr<bsp::File> bsp::File::Open(VFilePtr &f, ResultCode &code)
@@ -419,7 +421,7 @@ void bsp::File::ReadLeaves()
 void bsp::File::ReadLeafFaces() { ReadData<std::remove_reference_t<decltype(m_leafFaces.front())>>(16u, m_leafFaces); }
 void bsp::File::ReadLeafBrushes() { ReadData<std::remove_reference_t<decltype(m_leafBrushes.front())>>(17u, m_leafBrushes); }
 #define PKID(a, b) (((b) << 24) | ((a) << 16) | ('K' << 8) | 'P')
-#include <util_zip.h>
+
 void bsp::File::ReadPakfile()
 {
 	const auto lumpId = LUMP_ID_PAKFILE;
@@ -438,7 +440,7 @@ void bsp::File::ReadPakfile()
 	m_file->Seek(lump.fileofs);
 	data.resize(lump.filelen);
 	f->Read(data.data(), data.size());
-	m_pakZipFile = ZIPFile::Open(data.data(), data.size());
+	m_pakZipFile = uzip::ZIPFile::Open(data.data(), data.size());
 
 	auto bFoundRecord = false;
 	for(; offset >= 0; offset--) {

@@ -16,7 +16,9 @@
 namespace vmf {
 	struct DataFileBlock;
 };
-class ZIPFile;
+namespace uzip {
+	class ZIPFile;
+};
 namespace bsp {
 	const auto HEADER_LUMPS = 64u;
 
@@ -386,7 +388,7 @@ namespace bsp {
 		StaticPropData m_staticPropData = {};
 
 		std::vector<uint8_t> m_pakZipData;
-		std::shared_ptr<ZIPFile> m_pakZipFile = nullptr;
+		std::shared_ptr<uzip::ZIPFile> m_pakZipFile = nullptr;
 		ZIP_EndOfCentralDirRecord m_zipDirRecord;
 		std::vector<ZIP_FileHeader> m_fileHeaders;
 		std::vector<ZIP_LocalFileHeader> m_localFileHeaders;
