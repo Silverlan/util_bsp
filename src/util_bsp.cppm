@@ -2,24 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef __UTIL_BSP_HPP__
-#define __UTIL_BSP_HPP__
+module;
 
 #include <cinttypes>
 #include <array>
 #include <unordered_map>
 #include <mathutil/uvec.h>
 #include <fsys/vfileptr.h>
+#include "declarations.hpp"
 
 #define MAX_DISP_CORNER_NEIGHBORS 4
 
-namespace vmf {
-	struct DataFileBlock;
-};
-namespace uzip {
-	class ZIPFile;
-};
-namespace bsp {
+export module source_engine.bsp;
+
+export namespace source_engine::bsp {
 	const auto HEADER_LUMPS = 64u;
 
 	const auto LUMP_ID_ENTITIES = 0u;
@@ -434,4 +430,6 @@ namespace bsp {
 	};
 };
 
-#endif
+namespace source_engine::bsp {
+	bool lzma_uncompress(unsigned char *dest, size_t *destLen, const unsigned char *src, size_t *srcLen, const unsigned char *props, size_t propsSize);
+};

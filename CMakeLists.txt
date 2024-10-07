@@ -8,8 +8,7 @@ pr_add_dependency(${PROJ_NAME} util_vmf TARGET)
 pr_add_dependency(${PROJ_NAME} util_zip TARGET)
 pr_add_dependency(${PROJ_NAME} VTFLib13 TARGET)
 
-pr_add_headers(${PROJ_NAME} "include/")
-pr_add_sources(${PROJ_NAME} "src/")
+pr_init_module(${PROJ_NAME})
 
 add_subdirectory(third_party_libs/liblzma)
 
