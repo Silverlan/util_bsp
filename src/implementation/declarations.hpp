@@ -8,8 +8,5 @@
 namespace vmf {
 	struct DataFileBlock;
 };
-namespace uzip {
-	class ZIPFile;
-};
 
 #endif

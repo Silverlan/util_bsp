@@ -15,6 +15,8 @@ module;
 
 export module source_engine.bsp;
 
+import util_zip;
+
 export namespace source_engine::bsp {
 	const auto HEADER_LUMPS = 64u;
 
