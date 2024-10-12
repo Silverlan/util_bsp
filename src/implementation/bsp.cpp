@@ -13,12 +13,12 @@ module;
 #ifdef ENABLE_VMT_SUPPORT
 #include <VMTFile.h>
 #endif
-#include <vmf_entity_data.hpp>
 #include <cassert>
 
 module source_engine.bsp;
 
 import util_zip;
+import source_engine.vmf;
 
 #define IDBSPHEADER (('P' << 24) + ('S' << 16) + ('B' << 8) + 'V')
 
@@ -262,7 +262,7 @@ void source_engine::bsp::File::ReadEntityData()
 	fl->Seek(fl->Tell() - sizeof(uint32_t));
 
 	auto lumpEnd = offset + size;
-	std::unique_ptr<vmf::DataFileBlock> data {vmf::DataFile::ReadBlock(*fl, lumpEnd)};
+	std::unique_ptr<source_engine::vmf::DataFileBlock> data {source_engine::vmf::DataFile::ReadBlock(*fl, lumpEnd)};
 	if(data == nullptr)
 		return;
 	auto it = data->blocks.find("unnamed");

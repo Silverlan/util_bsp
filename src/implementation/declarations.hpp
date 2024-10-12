@@ -5,7 +5,7 @@
 #ifndef __UTIL_BSP_DECLARATIONS_HPP__
 #define __UTIL_BSP_DECLARATIONS_HPP__
 
-namespace vmf {
+namespace source_engine::vmf {
 	struct DataFileBlock;
 };
 
