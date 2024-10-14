@@ -9,13 +9,13 @@ module;
 #include <unordered_map>
 #include <mathutil/uvec.h>
 #include <fsys/vfileptr.h>
-#include "declarations.hpp"
 
 #define MAX_DISP_CORNER_NEIGHBORS 4
 
 export module source_engine.bsp;
 
 import util_zip;
+export import source_engine.vmf;
 
 export namespace source_engine::bsp {
 	const auto HEADER_LUMPS = 64u;
