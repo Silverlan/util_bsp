@@ -441,7 +441,8 @@ void source_engine::bsp::File::ReadPakfile()
 	m_file->Seek(lump.fileofs);
 	data.resize(lump.filelen);
 	f->Read(data.data(), data.size());
-	m_pakZipFile = uzip::ZIPFile::Open(data.data(), data.size());
+	std::string err;
+	m_pakZipFile = uzip::ZIPFile::Open(data.data(), data.size(), err);
 
 	auto bFoundRecord = false;
 	for(; offset >= 0; offset--) {
