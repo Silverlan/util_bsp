@@ -3,16 +3,13 @@
 
 module;
 
-#include <fsys/filesystem.h>
-#include <fsys/ifile.hpp>
-#include <sharedutils/util_string.h>
-#include <sharedutils/util_file.h>
-#include <sharedutils/util_path.hpp>
-#include <mathutil/uvec.h>
 #ifdef ENABLE_VMT_SUPPORT
 #include <VMTFile.h>
 #endif
 #include <cassert>
+#include <memory>
+#include <vector>
+#include <algorithm>
 
 module source_engine.bsp;
 
