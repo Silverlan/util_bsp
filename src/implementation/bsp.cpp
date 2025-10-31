@@ -7,9 +7,6 @@ module;
 #include <VMTFile.h>
 #endif
 #include <cassert>
-#include <memory>
-#include <vector>
-#include <algorithm>
 
 module source_engine.bsp;
 

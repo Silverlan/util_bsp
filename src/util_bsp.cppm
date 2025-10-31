@@ -3,12 +3,6 @@
 
 module;
 
-#include <cinttypes>
-#include <array>
-#include <unordered_map>
-#include <vector>
-#include <string>
-#include <memory>
 
 #define MAX_DISP_CORNER_NEIGHBORS 4
 
