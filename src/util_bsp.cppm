@@ -3,7 +3,6 @@
 
 module;
 
-
 #define MAX_DISP_CORNER_NEIGHBORS 4
 
 export module source_engine.bsp;
