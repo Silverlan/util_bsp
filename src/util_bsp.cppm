@@ -3,12 +3,6 @@
 
 module;
 
-#include <cinttypes>
-#include <array>
-#include <unordered_map>
-#include <mathutil/uvec.h>
-#include <fsys/vfileptr.h>
-
 #define MAX_DISP_CORNER_NEIGHBORS 4
 
 export module source_engine.bsp;
