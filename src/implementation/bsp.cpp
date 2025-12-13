@@ -15,7 +15,7 @@ import source_engine.vmf;
 
 #define IDBSPHEADER (('P' << 24) + ('S' << 16) + ('B' << 8) + 'V')
 
-std::unique_ptr<source_engine::bsp::File> source_engine::bsp::File::Open(VFilePtr &f, ResultCode &code)
+std::unique_ptr<source_engine::bsp::File> source_engine::bsp::File::Open(pragma::fs::VFilePtr &f, ResultCode &code)
 {
 	if(f == nullptr) {
 		code = ResultCode::FileNotFound;
@@ -33,7 +33,7 @@ std::unique_ptr<source_engine::bsp::File> source_engine::bsp::File::Open(VFilePt
 	return r;
 }
 
-source_engine::bsp::File::File(VFilePtr &f, const dheader_t &header) : m_file(f), m_header(header) {}
+source_engine::bsp::File::File(pragma::fs::VFilePtr &f, const dheader_t &header) : m_file(f), m_header(header) {}
 
 bool source_engine::bsp::File::HasReadLump(uint32_t lumpId) const { return m_readLumps & (1ull << lumpId); }
 void source_engine::bsp::File::MarkLumpAsRead(uint32_t lumpId) { m_readLumps |= (1ull << lumpId); }
@@ -47,7 +47,7 @@ struct lzma_header_t {
 };
 #pragma pack(pop)
 enum class DecompressionResult : uint8_t { NotCompressed = 0, Success, Failed };
-static DecompressionResult decompress_lzma(VFilePtr &f, std::vector<uint8_t> &decompressedData)
+static DecompressionResult decompress_lzma(pragma::fs::VFilePtr &f, std::vector<uint8_t> &decompressedData)
 {
 	auto id = f->Read<uint32_t>();
 	f->Seek(f->Tell() - sizeof(uint32_t));
@@ -66,7 +66,7 @@ static DecompressionResult decompress_lzma(VFilePtr &f, std::vector<uint8_t> &de
 }
 
 template<class TLump>
-static std::unique_ptr<ufile::IFile> get_lump_file(const TLump &lump, VFilePtr &f, uint64_t &offset, uint64_t &outSize)
+static std::unique_ptr<ufile::IFile> get_lump_file(const TLump &lump, pragma::fs::VFilePtr &f, uint64_t &offset, uint64_t &outSize)
 {
 	std::vector<uint8_t> uncompressedData;
 	auto r = decompress_lzma(f, uncompressedData);
@@ -79,7 +79,7 @@ static std::unique_ptr<ufile::IFile> get_lump_file(const TLump &lump, VFilePtr &
 		return nullptr;
 	offset = lump.fileofs;
 	outSize = lump.filelen;
-	return std::make_unique<fsys::File>(f);
+	return std::make_unique<pragma::fs::File>(f);
 }
 
 template<class T, class TContainer>
@@ -255,7 +255,7 @@ void source_engine::bsp::File::ReadEntityData()
 	fl->Seek(fl->Tell() - sizeof(uint32_t));
 
 	auto lumpEnd = offset + size;
-	std::unique_ptr<source_engine::vmf::DataFileBlock> data {source_engine::vmf::DataFile::ReadBlock(*fl, lumpEnd)};
+	std::unique_ptr<vmf::DataFileBlock> data {vmf::DataFile::ReadBlock(*fl, lumpEnd)};
 	if(data == nullptr)
 		return;
 	auto it = data->blocks.find("unnamed");
@@ -401,7 +401,7 @@ void source_engine::bsp::File::ReadTexDataStringData()
 
 	while(fl->Eof() == false && fl->Tell() < offset + size) {
 		m_texDataStringDataIndexMap.insert(std::make_pair(fl->Tell() - offset, m_texDataStringData.size()));
-		m_texDataStringData.push_back(::util::Path::CreateFile(fl->ReadString()).GetString());
+		m_texDataStringData.push_back(pragma::util::Path::CreateFile(fl->ReadString()).GetString());
 	}
 }
 void source_engine::bsp::File::ReadNodes() { ReadData<std::remove_reference_t<decltype(m_nodes.front())>>(5u, m_nodes); }
@@ -513,8 +513,8 @@ void source_engine::bsp::File::ReadDisplacementData()
 		auto &dispVerts = disp.verts;
 		auto &dispTris = disp.tris;
 		auto p = static_cast<uint32_t>(dispInfo.power);
-		auto numVerts = umath::pow2(umath::pow(2u, p) + 1u);
-		auto numTris = 2 * umath::pow2(umath::pow(2u, p));
+		auto numVerts = pragma::math::pow2(pragma::math::pow(2u, p) + 1u);
+		auto numTris = 2 * pragma::math::pow2(pragma::math::pow(2u, p));
 
 		if(sizeV != 0) {
 			dispVerts.resize(numVerts);
@@ -622,29 +622,29 @@ const std::vector<std::string> &source_engine::bsp::File::GetTranslatedTexDataSt
 	for(auto &fname : fileNames) {
 		auto relFname = fname;
 		ufile::remove_extension_from_filename(relFname);
-		if(ustring::compare(relFname.c_str(), "materials/", false, 10))
-			relFname = ustring::substr(relFname, 10);
+		if(pragma::string::compare(relFname.c_str(), "materials/", false, 10))
+			relFname = pragma::string::substr(relFname, 10);
 
-		auto it = std::find_if(strings.begin(), strings.end(), [&relFname](const std::string &fnameOther) { return ustring::compare(relFname, fnameOther, false); });
+		auto it = std::find_if(strings.begin(), strings.end(), [&relFname](const std::string &fnameOther) { return pragma::string::compare(relFname, fnameOther, false); });
 		if(it == strings.end())
 			continue;
 		std::string ext;
-		if(ufile::get_extension(fname, &ext) == true && ustring::compare<std::string>(ext, "vmt", false) == true) {
+		if(ufile::get_extension(fname, &ext) == true && pragma::string::compare<std::string>(ext, "vmt", false) == true) {
 			std::vector<uint8_t> data;
 			if(ReadFile(fname, data) == true) {
 				VTFLib::CVMTFile vmt {};
 				if(vmt.Load(data.data(), static_cast<vlUInt>(data.size())) == vlTrue) {
 					auto *vmtRoot = vmt.GetRoot();
 					std::string shader = vmtRoot->GetName();
-					if(ustring::compare<std::string>(shader, "patch", false)) {
+					if(pragma::string::compare<std::string>(shader, "patch", false)) {
 						VTFLib::Nodes::CVMTNode *node = nullptr;
 						if((node = vmtRoot->GetNode("include")) != nullptr) {
 							if(node->GetType() == VMTNodeType::NODE_TYPE_STRING) {
 								auto *includeNode = static_cast<VTFLib::Nodes::CVMTStringNode *>(node);
 								std::string include = includeNode->GetValue();
 								ufile::remove_extension_from_filename(include);
-								if(ustring::compare(include.c_str(), "materials/", false, 10))
-									*it = ustring::substr(include, 10);
+								if(pragma::string::compare(include.c_str(), "materials/", false, 10))
+									*it = pragma::string::substr(include, 10);
 							}
 						}
 					}
@@ -757,7 +757,7 @@ const bool source_engine::bsp::File::ReadFile(const std::string &fname, std::vec
 	// Obsolete
 #if 0
 	auto it = std::find_if(m_fileNames.begin(),m_fileNames.end(),[&](const std::string &fnameOther) {
-		return ustring::compare(fname,fnameOther,false);
+		return pragma::string::compare(fname,fnameOther,false);
 	});
 	if(it == m_fileNames.end())
 		return false;

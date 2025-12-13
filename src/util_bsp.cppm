@@ -302,7 +302,7 @@ export namespace source_engine::bsp {
 	using EntityBlock = std::shared_ptr<vmf::DataFileBlock>;
 	class File {
 	  public:
-		static std::unique_ptr<File> Open(VFilePtr &f, ResultCode &code);
+		static std::unique_ptr<File> Open(pragma::fs::VFilePtr &f, ResultCode &code);
 
 		const lump_t *GetLumpHeaderInfo(uint32_t lumpId) const;
 		const std::vector<dgamelump_t> &GetGameLumps();
@@ -338,13 +338,13 @@ export namespace source_engine::bsp {
 		const dheader_t &GetHeaderData() const;
 		const bool ReadFile(const std::string &fname, std::vector<uint8_t> &data);
 	  private:
-		VFilePtr m_file;
+		pragma::fs::VFilePtr m_file;
 		dheader_t m_header;
 		uint64_t m_readLumps = 0;
 		bool m_bStringDataIndicesRead = false;
 		bool m_bStringDataTranslated = false;
 		bool m_bDisplacementsRead = false;
-		File(VFilePtr &f, const dheader_t &header);
+		File(pragma::fs::VFilePtr &f, const dheader_t &header);
 
 		std::vector<dgamelump_t> m_gameLumps;
 		std::vector<EntityBlock> m_entities;
