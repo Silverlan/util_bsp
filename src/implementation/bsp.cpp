@@ -13,16 +13,15 @@ module source_engine.bsp;
 import util_zip;
 import source_engine.vmf;
 
-#define IDBSPHEADER (('P' << 24) + ('S' << 16) + ('B' << 8) + 'V')
-
 std::unique_ptr<source_engine::bsp::File> source_engine::bsp::File::Open(pragma::fs::VFilePtr &f, ResultCode &code)
 {
 	if(f == nullptr) {
 		code = ResultCode::FileNotFound;
 		return nullptr;
 	}
-	auto header = f->Read<dheader_t>();
-	if(header.ident != IDBSPHEADER) {
+	auto header = f->Read<Header>();
+	constexpr int32_t expectedHeader = (('P' << 24) + ('S' << 16) + ('B' << 8) + 'V');
+	if(header.identifier != expectedHeader) {
 		code = ResultCode::InvalidHeaderIdent;
 		return nullptr;
 	}
@@ -33,16 +32,16 @@ std::unique_ptr<source_engine::bsp::File> source_engine::bsp::File::Open(pragma:
 	return r;
 }
 
-source_engine::bsp::File::File(pragma::fs::VFilePtr &f, const dheader_t &header) : m_file(f), m_header(header) {}
+source_engine::bsp::File::File(pragma::fs::VFilePtr &f, const Header &header) : m_file(f), m_header(header) {}
 
-bool source_engine::bsp::File::HasReadLump(uint32_t lumpId) const { return m_readLumps & (1ull << lumpId); }
-void source_engine::bsp::File::MarkLumpAsRead(uint32_t lumpId) { m_readLumps |= (1ull << lumpId); }
-#define LZMA_ID (('A' << 24) | ('M' << 16) | ('Z' << 8) | ('L'))
+bool source_engine::bsp::File::HasReadLump(LumpId lumpId) const { return m_readLumps & (1ull << pragma::math::to_integral(lumpId)); }
+void source_engine::bsp::File::MarkLumpAsRead(LumpId lumpId) { m_readLumps |= (1ull << pragma::math::to_integral(lumpId)); }
+
 #pragma pack(push, 1)
-struct lzma_header_t {
+struct LzmaHeader {
 	uint32_t id;
-	uint32_t actualSize; // always little endian
-	uint32_t lzmaSize;   // always little endian
+	uint32_t actualSize;
+	uint32_t lzmaSize;
 	std::array<uint8_t, 5> properties;
 };
 #pragma pack(pop)
@@ -51,9 +50,10 @@ static DecompressionResult decompress_lzma(pragma::fs::VFilePtr &f, std::vector<
 {
 	auto id = f->Read<uint32_t>();
 	f->Seek(f->Tell() - sizeof(uint32_t));
-	if(id != LZMA_ID)
+	constexpr uint32_t expectedId = (('A' << 24) | ('M' << 16) | ('Z' << 8) | ('L'));
+	if(id != expectedId)
 		return DecompressionResult::NotCompressed;
-	auto lzmaHeader = f->Read<lzma_header_t>();
+	auto lzmaHeader = f->Read<LzmaHeader>();
 	std::vector<uint8_t> compressedData;
 	compressedData.resize(lzmaHeader.lzmaSize);
 	f->Read(compressedData.data(), compressedData.size());
@@ -77,23 +77,23 @@ static std::unique_ptr<ufile::IFile> get_lump_file(const TLump &lump, pragma::fs
 	}
 	if(r == DecompressionResult::Failed)
 		return nullptr;
-	offset = lump.fileofs;
-	outSize = lump.filelen;
+	offset = lump.fileOffset;
+	outSize = lump.fileLength;
 	return std::make_unique<pragma::fs::File>(f);
 }
 
 template<class T, class TContainer>
-void source_engine::bsp::File::ReadData(uint32_t lumpId, TContainer &data)
+void source_engine::bsp::File::ReadData(LumpId lumpId, TContainer &data)
 {
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -108,7 +108,7 @@ void source_engine::bsp::File::ReadData(uint32_t lumpId, TContainer &data)
 }
 
 template<class T, class TContainer>
-void source_engine::bsp::File::ReadData(uint32_t lumpId, TContainer &data, uint32_t padding)
+void source_engine::bsp::File::ReadData(LumpId lumpId, TContainer &data, uint32_t padding)
 {
 	if(padding == 0) {
 		ReadData<T, TContainer>(lumpId, data);
@@ -119,10 +119,10 @@ void source_engine::bsp::File::ReadData(uint32_t lumpId, TContainer &data, uint3
 	MarkLumpAsRead(lumpId);
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -144,16 +144,16 @@ void source_engine::bsp::File::ReadData(uint32_t lumpId, TContainer &data, uint3
 
 void source_engine::bsp::File::ReadGameData()
 {
-	const auto lumpId = LUMP_ID_GAME;
+	const auto lumpId = LumpId::Game;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	auto numLumps = f->Read<int32_t>();
 	m_gameLumps.resize(numLumps);
@@ -172,7 +172,7 @@ void source_engine::bsp::File::ReadGameData()
 void source_engine::bsp::File::ReadStaticPropsData()
 {
 	ReadGameData();
-	auto it = std::find_if(m_gameLumps.begin(), m_gameLumps.end(), [](const dgamelump_t &lump) {
+	auto it = std::find_if(m_gameLumps.begin(), m_gameLumps.end(), [](const GameLump &lump) {
 		std::string identifier(reinterpret_cast<const char *>(&lump.id), 4);
 		std::reverse(identifier.begin(), identifier.end());
 		return identifier == "sprp";
@@ -181,10 +181,10 @@ void source_engine::bsp::File::ReadStaticPropsData()
 		return;
 	auto &f = m_file;
 	auto &lump = *it;
-	if(lump.filelen == 0)
+	if(lump.fileLength == 0)
 		return;
 	auto version = lump.version;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -216,17 +216,17 @@ void source_engine::bsp::File::ReadStaticPropsData()
 		auto offset = fl->Tell();
 		auto &propLump = staticPropLumps.back();
 		if(version >= 4) {
-			propLump.Origin = fl->Read<Vector3>();
-			propLump.Angles = fl->Read<EulerAngles>();
-			propLump.PropType = fl->Read<uint16_t>();
-			propLump.FirstLeaf = fl->Read<uint16_t>();
-			propLump.LeafCount = fl->Read<uint16_t>();
-			propLump.Solid = fl->Read<uint8_t>();
-			propLump.Flags = fl->Read<uint8_t>();
-			propLump.Skin = fl->Read<int32_t>();
-			propLump.FadeMinDist = fl->Read<float>();
-			propLump.FadeMaxDist = fl->Read<float>();
-			propLump.LightingOrigin = fl->Read<Vector3>();
+			propLump.origin = fl->Read<Vector3>();
+			propLump.angles = fl->Read<EulerAngles>();
+			propLump.propType = fl->Read<uint16_t>();
+			propLump.firstLeaf = fl->Read<uint16_t>();
+			propLump.leafCount = fl->Read<uint16_t>();
+			propLump.solid = fl->Read<uint8_t>();
+			propLump.flags = fl->Read<uint8_t>();
+			propLump.skin = fl->Read<int32_t>();
+			propLump.fadeMinDist = fl->Read<float>();
+			propLump.fadeMaxDist = fl->Read<float>();
+			propLump.lightingOrigin = fl->Read<Vector3>();
 		}
 		fl->Seek(offset + szPerLump);
 	}
@@ -234,16 +234,16 @@ void source_engine::bsp::File::ReadStaticPropsData()
 
 void source_engine::bsp::File::ReadEntityData()
 {
-	const auto lumpId = LUMP_ID_ENTITIES;
+	const auto lumpId = LumpId::Entities;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -266,23 +266,23 @@ void source_engine::bsp::File::ReadEntityData()
 		m_entities.push_back(EntityBlock(block));
 	it->second->clear();
 
-	//m_entities.resize(lump.filelen);
-	//f->Read(&m_entities[0],lump.filelen);
+	//m_entities.resize(lump.fileLength);
+	//f->Read(&m_entities[0],lump.fileLength);
 }
 
 void source_engine::bsp::File::ReadLightMapData()
 {
-	const auto lumpId = LUMP_ID_LIGHTING;
+	const auto lumpId = LumpId::Lighting;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -294,17 +294,17 @@ void source_engine::bsp::File::ReadLightMapData()
 }
 void source_engine::bsp::File::ReadHDRLightMapData()
 {
-	const auto lumpId = LUMP_ID_LIGHTING_HDR;
+	const auto lumpId = LumpId::LightingHdr;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -316,17 +316,17 @@ void source_engine::bsp::File::ReadHDRLightMapData()
 }
 void source_engine::bsp::File::ReadVisibilityData()
 {
-	const auto lumpId = LUMP_ID_VISIBILITY;
+	const auto lumpId = LumpId::Visibility;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -365,33 +365,33 @@ void source_engine::bsp::File::ReadVisibilityData()
 		}
 	}
 }
-void source_engine::bsp::File::ReadPlaneData() { ReadData<std::remove_reference_t<decltype(m_planes.front())>>(LUMP_ID_PLANES, m_planes); }
-void source_engine::bsp::File::ReadVertexData() { ReadData<std::remove_reference_t<decltype(m_vertices.front())>>(LUMP_ID_VERTICES, m_vertices); }
-void source_engine::bsp::File::ReadEdgeData() { ReadData<std::remove_reference_t<decltype(m_edges.front())>>(LUMP_ID_EDGES, m_edges); }
-void source_engine::bsp::File::ReadSurfEdgeData() { ReadData<std::remove_reference_t<decltype(m_surfEdges.front())>>(LUMP_ID_SURF_EDGES, m_surfEdges); }
-void source_engine::bsp::File::ReadFaceData() { ReadData<std::remove_reference_t<decltype(m_faces.front())>>(LUMP_ID_FACES, m_faces); }
-void source_engine::bsp::File::ReadHDRFaceData() { ReadData<std::remove_reference_t<decltype(m_hdrFaces.front())>>(LUMP_ID_FACES_HDR, m_hdrFaces); }
-void source_engine::bsp::File::ReadOriginalFaceData() { ReadData<std::remove_reference_t<decltype(m_origFaces.front())>>(LUMP_ID_ORIGINAL_FACES, m_origFaces); }
-void source_engine::bsp::File::ReadBrushData() { ReadData<std::remove_reference_t<decltype(m_brushes.front())>>(LUMP_ID_BRUSHES, m_brushes); }
-void source_engine::bsp::File::ReadBrushSideData() { ReadData<std::remove_reference_t<decltype(m_brushSides.front())>>(LUMP_ID_BRUSH_SIDES, m_brushSides); }
-void source_engine::bsp::File::ReadTexInfoData() { ReadData<std::remove_reference_t<decltype(m_texInfo.front())>>(LUMP_ID_TEXINFO, m_texInfo); }
-void source_engine::bsp::File::ReadTexData() { ReadData<std::remove_reference_t<decltype(m_texData.front())>>(LUMP_ID_TEXDATA, m_texData); }
-void source_engine::bsp::File::ReadModelData() { ReadData<std::remove_reference_t<decltype(m_models.front())>>(LUMP_ID_MODELS, m_models); }
-void source_engine::bsp::File::ReadDispLightmapSamplePositions() { ReadData<std::remove_reference_t<decltype(m_dispLightmapSamplePositions.front())>>(LUMP_ID_DISP_LIGHTMAP_SAMPLE_POSITIONS, m_dispLightmapSamplePositions); }
-void source_engine::bsp::File::ReadCubemapSamples() { ReadData<std::remove_reference_t<decltype(m_cubemapSamples.front())>>(LUMP_ID_CUBEMAPS, m_cubemapSamples); }
-void source_engine::bsp::File::ReadTexDataStringTableData() { ReadData<std::remove_reference_t<decltype(m_texDataStringTableData.front())>>(LUMP_ID_TEXDATA_STRING_TABLE, m_texDataStringTableData); }
+void source_engine::bsp::File::ReadPlaneData() { ReadData<std::remove_reference_t<decltype(m_planes.front())>>(LumpId::Planes, m_planes); }
+void source_engine::bsp::File::ReadVertexData() { ReadData<std::remove_reference_t<decltype(m_vertices.front())>>(LumpId::Vertices, m_vertices); }
+void source_engine::bsp::File::ReadEdgeData() { ReadData<std::remove_reference_t<decltype(m_edges.front())>>(LumpId::Edges, m_edges); }
+void source_engine::bsp::File::ReadSurfEdgeData() { ReadData<std::remove_reference_t<decltype(m_surfEdges.front())>>(LumpId::SurfEdges, m_surfEdges); }
+void source_engine::bsp::File::ReadFaceData() { ReadData<std::remove_reference_t<decltype(m_faces.front())>>(LumpId::Faces, m_faces); }
+void source_engine::bsp::File::ReadHDRFaceData() { ReadData<std::remove_reference_t<decltype(m_hdrFaces.front())>>(LumpId::FacesHdr, m_hdrFaces); }
+void source_engine::bsp::File::ReadOriginalFaceData() { ReadData<std::remove_reference_t<decltype(m_origFaces.front())>>(LumpId::OriginalFaces, m_origFaces); }
+void source_engine::bsp::File::ReadBrushData() { ReadData<std::remove_reference_t<decltype(m_brushes.front())>>(LumpId::Brushes, m_brushes); }
+void source_engine::bsp::File::ReadBrushSideData() { ReadData<std::remove_reference_t<decltype(m_brushSides.front())>>(LumpId::BrushSides, m_brushSides); }
+void source_engine::bsp::File::ReadTexInfoData() { ReadData<std::remove_reference_t<decltype(m_texInfo.front())>>(LumpId::TexInfo, m_texInfo); }
+void source_engine::bsp::File::ReadTexData() { ReadData<std::remove_reference_t<decltype(m_texData.front())>>(LumpId::TexData, m_texData); }
+void source_engine::bsp::File::ReadModelData() { ReadData<std::remove_reference_t<decltype(m_models.front())>>(LumpId::Models, m_models); }
+void source_engine::bsp::File::ReadDispLightmapSamplePositions() { ReadData<std::remove_reference_t<decltype(m_dispLightmapSamplePositions.front())>>(LumpId::DispLightmapSamplePositions, m_dispLightmapSamplePositions); }
+void source_engine::bsp::File::ReadCubemapSamples() { ReadData<std::remove_reference_t<decltype(m_cubemapSamples.front())>>(LumpId::Cubemaps, m_cubemapSamples); }
+void source_engine::bsp::File::ReadTexDataStringTableData() { ReadData<std::remove_reference_t<decltype(m_texDataStringTableData.front())>>(LumpId::TexDataStringTable, m_texDataStringTableData); }
 void source_engine::bsp::File::ReadTexDataStringData()
 {
-	const auto lumpId = LUMP_ID_TEXDATA_STRING_DATA;
+	const auto lumpId = LumpId::TexDataStringData;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
-	f->Seek(lump.fileofs);
+	f->Seek(lump.fileOffset);
 
 	size_t offset;
 	size_t size;
@@ -404,35 +404,34 @@ void source_engine::bsp::File::ReadTexDataStringData()
 		m_texDataStringData.push_back(pragma::util::Path::CreateFile(fl->ReadString()).GetString());
 	}
 }
-void source_engine::bsp::File::ReadNodes() { ReadData<std::remove_reference_t<decltype(m_nodes.front())>>(5u, m_nodes); }
+void source_engine::bsp::File::ReadNodes() { ReadData<std::remove_reference_t<decltype(m_nodes.front())>>(LumpId::Nodes, m_nodes); }
 void source_engine::bsp::File::ReadLeaves()
 {
 	auto padding = 0u;
 	if(m_header.version <= 19)
 		padding = 56u - sizeof(decltype(m_leaves.front()));
-	ReadData<std::remove_reference_t<decltype(m_leaves.front())>>(10u, m_leaves, padding);
+	ReadData<std::remove_reference_t<decltype(m_leaves.front())>>(LumpId::Leaves, m_leaves, padding);
 }
-void source_engine::bsp::File::ReadLeafFaces() { ReadData<std::remove_reference_t<decltype(m_leafFaces.front())>>(16u, m_leafFaces); }
-void source_engine::bsp::File::ReadLeafBrushes() { ReadData<std::remove_reference_t<decltype(m_leafBrushes.front())>>(17u, m_leafBrushes); }
-#define PKID(a, b) (((b) << 24) | ((a) << 16) | ('K' << 8) | 'P')
+void source_engine::bsp::File::ReadLeafFaces() { ReadData<std::remove_reference_t<decltype(m_leafFaces.front())>>(LumpId::LeafFaces, m_leafFaces); }
+void source_engine::bsp::File::ReadLeafBrushes() { ReadData<std::remove_reference_t<decltype(m_leafBrushes.front())>>(LumpId::LeafBrushes, m_leafBrushes); }
 
 void source_engine::bsp::File::ReadPakfile()
 {
-	const auto lumpId = LUMP_ID_PAKFILE;
+	const auto lumpId = LumpId::PakFile;
 	if(HasReadLump(lumpId) == true)
 		return;
 	MarkLumpAsRead(lumpId);
 	auto &f = m_file;
 	auto &header = m_header;
-	auto &lump = header.lumps.at(lumpId);
-	if(lump.filelen == 0)
+	auto &lump = header.lumps.at(pragma::math::to_integral(lumpId));
+	if(lump.fileLength == 0)
 		return;
 
-	int64_t offset = lump.fileofs + lump.filelen - sizeof(ZIP_EndOfCentralDirRecord);
+	int64_t offset = lump.fileOffset + lump.fileLength - sizeof(ZipEndOfCentralDirRecord);
 
 	auto &data = m_pakZipData;
-	m_file->Seek(lump.fileofs);
-	data.resize(lump.filelen);
+	m_file->Seek(lump.fileOffset);
+	data.resize(lump.fileLength);
 	f->Read(data.data(), data.size());
 	std::string err;
 	m_pakZipFile = uzip::ZIPFile::Open(data.data(), data.size(), err);
@@ -441,14 +440,15 @@ void source_engine::bsp::File::ReadPakfile()
 	for(; offset >= 0; offset--) {
 		f->Seek(offset);
 		f->Read(&m_zipDirRecord, sizeof(m_zipDirRecord));
-		if(m_zipDirRecord.signature == PKID(5, 6)) {
+		constexpr uint32_t expectedSignature = (((6) << 24) | ((5) << 16) | ('K' << 8) | 'P');
+		if(m_zipDirRecord.signature == expectedSignature) {
 			bFoundRecord = true;
 			break;
 		}
 	}
 	if(bFoundRecord == false)
 		return;
-	f->Seek(lump.fileofs + m_zipDirRecord.startOfCentralDirOffset);
+	f->Seek(lump.fileOffset + m_zipDirRecord.startOfCentralDirOffset);
 	m_fileHeaders.resize(m_zipDirRecord.nCentralDirectoryEntries_Total);
 	m_localFileHeaders.resize(m_fileHeaders.size());
 	m_fileNames.reserve(m_fileHeaders.size());
@@ -464,7 +464,7 @@ void source_engine::bsp::File::ReadPakfile()
 		fname.resize(hd.fileNameLength);
 		f->Read(&fname[0], hd.fileNameLength);
 
-		f->Seek(lump.fileofs + hd.relativeOffsetOfLocalHeader);
+		f->Seek(lump.fileOffset + hd.relativeOffsetOfLocalHeader);
 		f->Read(&lhd, sizeof(lhd));
 		m_fileDataOffsets.push_back(f->Tell() + hd.fileNameLength + hd.extraFieldLength);
 
@@ -482,29 +482,29 @@ void source_engine::bsp::File::ReadDisplacementData()
 	auto &dispInfo = GetDispInfo();
 	auto &planes = GetPlanes();
 	for(auto &face : origFaces) {
-		if(face.dispinfo == -1)
+		if(face.dispInfo == -1)
 			continue;
-		auto it = std::find_if(displacements.begin(), displacements.end(), [&face](const dDisp &disp) { return (disp.face.dispinfo == face.dispinfo) ? true : false; });
+		auto it = std::find_if(displacements.begin(), displacements.end(), [&face](const Displacement &disp) { return (disp.face.dispInfo == face.dispInfo) ? true : false; });
 		if(it != displacements.end())
 			continue;
-		auto &plane = planes.at(face.planenum);
-		auto &faceDispInfo = dispInfo.at(face.dispinfo);
+		auto &plane = planes.at(face.planeId);
+		auto &faceDispInfo = dispInfo.at(face.dispInfo);
 		if(displacements.size() == displacements.capacity())
 			displacements.reserve(displacements.size() + 100);
-		displacements.push_back({faces.at(faceDispInfo.MapFace), plane, faceDispInfo});
+		displacements.push_back({faces.at(faceDispInfo.mapFace), plane, faceDispInfo});
 	}
 
 	auto &header = m_header;
 	size_t offsetV;
 	size_t sizeV;
-	auto &lumpV = header.lumps.at(LUMP_ID_DISP_VERTS);
-	m_file->Seek(lumpV.fileofs);
+	auto &lumpV = header.lumps.at(pragma::math::to_integral(LumpId::DispVerts));
+	m_file->Seek(lumpV.fileOffset);
 	auto flV = get_lump_file(lumpV, m_file, offsetV, sizeV);
 
 	size_t offsetT;
 	size_t sizeT;
-	auto &lumpT = header.lumps.at(LUMP_ID_DISP_TRIS);
-	m_file->Seek(lumpT.fileofs);
+	auto &lumpT = header.lumps.at(pragma::math::to_integral(LumpId::DispTris));
+	m_file->Seek(lumpT.fileOffset);
 	auto flT = get_lump_file(lumpT, m_file, offsetT, sizeT);
 	if(!flV || !flT)
 		return;
@@ -518,25 +518,25 @@ void source_engine::bsp::File::ReadDisplacementData()
 
 		if(sizeV != 0) {
 			dispVerts.resize(numVerts);
-			flV->Seek(offsetV + dispInfo.DispVertStart * sizeof(dispVerts.front()));
+			flV->Seek(offsetV + dispInfo.dispVertStart * sizeof(dispVerts.front()));
 			flV->Read(dispVerts.data(), dispVerts.size() * sizeof(dispVerts.front()));
 		}
 
 		if(sizeT != 0) {
 			dispTris.resize(numTris);
-			flT->Seek(offsetT + dispInfo.DispTriStart * sizeof(dispTris.front()));
+			flT->Seek(offsetT + dispInfo.dispTriStart * sizeof(dispTris.front()));
 			flT->Read(dispTris.data(), dispTris.size() * sizeof(dispTris.front()));
 		}
 	}
 }
-void source_engine::bsp::File::ReadDispInfo() { ReadData<std::remove_reference_t<decltype(m_dispInfo.front())>>(26u, m_dispInfo); }
+void source_engine::bsp::File::ReadDispInfo() { ReadData<std::remove_reference_t<decltype(m_dispInfo.front())>>(LumpId::DispInfo, m_dispInfo); }
 
-const source_engine::bsp::lump_t *source_engine::bsp::File::GetLumpHeaderInfo(uint32_t lumpId) const
+const source_engine::bsp::Lump *source_engine::bsp::File::GetLumpHeaderInfo(LumpId lumpId) const
 {
 	auto &header = m_header;
-	return (lumpId < header.lumps.size()) ? &header.lumps.at(lumpId) : nullptr;
+	return (pragma::math::to_integral(lumpId) < header.lumps.size()) ? &header.lumps.at(pragma::math::to_integral(lumpId)) : nullptr;
 }
-const std::vector<source_engine::bsp::dgamelump_t> &source_engine::bsp::File::GetGameLumps()
+const std::vector<source_engine::bsp::GameLump> &source_engine::bsp::File::GetGameLumps()
 {
 	ReadGameData();
 	return m_gameLumps;
@@ -546,7 +546,7 @@ const std::vector<source_engine::bsp::EntityBlock> &source_engine::bsp::File::Ge
 	ReadEntityData();
 	return m_entities;
 }
-const std::vector<source_engine::bsp::dplane_t> &source_engine::bsp::File::GetPlanes()
+const std::vector<source_engine::bsp::Plane> &source_engine::bsp::File::GetPlanes()
 {
 	ReadPlaneData();
 	return m_planes;
@@ -556,7 +556,7 @@ const std::vector<Vector3> &source_engine::bsp::File::GetVertices()
 	ReadVertexData();
 	return m_vertices;
 }
-const std::vector<source_engine::bsp::dedge_t> &source_engine::bsp::File::GetEdges()
+const std::vector<source_engine::bsp::Edge> &source_engine::bsp::File::GetEdges()
 {
 	ReadEdgeData();
 	return m_edges;
@@ -566,42 +566,42 @@ const std::vector<int32_t> &source_engine::bsp::File::GetSurfEdges()
 	ReadSurfEdgeData();
 	return m_surfEdges;
 }
-const std::vector<source_engine::bsp::dface_t> &source_engine::bsp::File::GetFaces()
+const std::vector<source_engine::bsp::Face> &source_engine::bsp::File::GetFaces()
 {
 	ReadFaceData();
 	return m_faces;
 }
-const std::vector<source_engine::bsp::dface_t> &source_engine::bsp::File::GetHDRFaces()
+const std::vector<source_engine::bsp::Face> &source_engine::bsp::File::GetHDRFaces()
 {
 	ReadHDRFaceData();
 	return m_hdrFaces;
 }
-const std::vector<source_engine::bsp::dface_t> &source_engine::bsp::File::GetOriginalFaces()
+const std::vector<source_engine::bsp::Face> &source_engine::bsp::File::GetOriginalFaces()
 {
 	ReadOriginalFaceData();
 	return m_origFaces;
 }
-const std::vector<source_engine::bsp::dbrush_t> &source_engine::bsp::File::GetBrushes()
+const std::vector<source_engine::bsp::Brush> &source_engine::bsp::File::GetBrushes()
 {
 	ReadBrushData();
 	return m_brushes;
 }
-const std::vector<source_engine::bsp::dbrushside_t> &source_engine::bsp::File::GetBrushSides()
+const std::vector<source_engine::bsp::BrushSide> &source_engine::bsp::File::GetBrushSides()
 {
 	ReadBrushSideData();
 	return m_brushSides;
 }
-const std::vector<source_engine::bsp::texinfo_t> &source_engine::bsp::File::GetTexInfo()
+const std::vector<source_engine::bsp::TexInfo> &source_engine::bsp::File::GetTexInfo()
 {
 	ReadTexInfoData();
 	return m_texInfo;
 }
-const std::vector<source_engine::bsp::dtexdata_t> &source_engine::bsp::File::GetTexData()
+const std::vector<source_engine::bsp::TexData> &source_engine::bsp::File::GetTexData()
 {
 	ReadTexData();
 	return m_texData;
 }
-const std::vector<source_engine::bsp::dmodel_t> &source_engine::bsp::File::GetModels()
+const std::vector<source_engine::bsp::Model> &source_engine::bsp::File::GetModels()
 {
 	ReadModelData();
 	return m_models;
@@ -675,12 +675,12 @@ const std::vector<uint32_t> &source_engine::bsp::File::GetTexDataStringIndices()
 	}
 	return m_texDataStringDataIndices;
 }
-const std::vector<source_engine::bsp::dnode_t> &source_engine::bsp::File::GetNodes()
+const std::vector<source_engine::bsp::Node> &source_engine::bsp::File::GetNodes()
 {
 	ReadNodes();
 	return m_nodes;
 }
-const std::vector<source_engine::bsp::dleaf_t> &source_engine::bsp::File::GetLeaves()
+const std::vector<source_engine::bsp::Leaf> &source_engine::bsp::File::GetLeaves()
 {
 	ReadLeaves();
 	return m_leaves;
@@ -700,12 +700,12 @@ const std::vector<std::string> &source_engine::bsp::File::GetFilenames()
 	ReadPakfile();
 	return m_fileNames;
 }
-const std::vector<source_engine::bsp::ddispinfo_t> &source_engine::bsp::File::GetDispInfo()
+const std::vector<source_engine::bsp::DisplacementInfo> &source_engine::bsp::File::GetDispInfo()
 {
 	ReadDispInfo();
 	return m_dispInfo;
 }
-const std::vector<source_engine::bsp::dDisp> &source_engine::bsp::File::GetDisplacements()
+const std::vector<source_engine::bsp::Displacement> &source_engine::bsp::File::GetDisplacements()
 {
 	ReadDisplacementData();
 	return m_displacements;
@@ -730,7 +730,7 @@ const std::vector<uint8_t> &source_engine::bsp::File::GetDispLightmapSamplePosit
 	ReadDispLightmapSamplePositions();
 	return m_dispLightmapSamplePositions;
 }
-const std::vector<source_engine::bsp::dcubemapsample_t> &source_engine::bsp::File::GetCubemapSamples()
+const std::vector<source_engine::bsp::CubemapSample> &source_engine::bsp::File::GetCubemapSamples()
 {
 	ReadCubemapSamples();
 	return m_cubemapSamples;
@@ -740,7 +740,7 @@ const source_engine::bsp::StaticPropData &source_engine::bsp::File::GetStaticPro
 	ReadStaticPropsData();
 	return m_staticPropData;
 }
-const source_engine::bsp::dheader_t &source_engine::bsp::File::GetHeaderData() const { return m_header; }
+const source_engine::bsp::Header &source_engine::bsp::File::GetHeaderData() const { return m_header; }
 const bool source_engine::bsp::File::ReadFile(const std::string &fname, std::vector<uint8_t> &data)
 {
 	ReadPakfile();
